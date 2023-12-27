@@ -1,1 +1,1 @@
-"# IKP" 
+Projekat iz predmeta Industrijski komunikacioni protokoli u EES
