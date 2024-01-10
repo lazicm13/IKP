@@ -1,0 +1,6 @@
+# depslib dependency file v1.0
+1704925316 source:c:\users\filip\documents\github\ikp_projekat\client\main.c
+	<stdio.h>
+	<stdlib.h>
+	<winsock2.h>
+
