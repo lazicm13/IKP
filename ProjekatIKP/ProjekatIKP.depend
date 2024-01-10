@@ -3,3 +3,25 @@
 	<stdio.h>
 	<stdlib.h>
 
+1704915264 source:c:\users\filip\documents\github\ikp_projekat\projekatikp\main.c
+	<stdio.h>
+	<stdlib.h>
+	<pthread.h>
+	"heap_manager.h"
+
+1704910776 source:c:\users\filip\documents\github\ikp_projekat\projekatikp\heap_manager.cpp
+	"heap_manager.hpp"
+
+1704911050 c:\users\filip\documents\github\ikp_projekat\projekatikp\heap_manager.hpp
+	<stdlib.h>
+	<stdbool.h>
+	<pthread.h>
+
+1704914906 source:c:\users\filip\documents\github\ikp_projekat\projekatikp\heap_manager.c
+	"heap_manager.h"
+
+1704912455 c:\users\filip\documents\github\ikp_projekat\projekatikp\heap_manager.h
+	<stdlib.h>
+	<stdbool.h>
+	<pthread.h>
+

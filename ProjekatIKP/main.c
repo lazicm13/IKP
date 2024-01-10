@@ -1,81 +1,68 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <pthread.h>
+#include "heap_manager.h"
 
-#define SEGMENT_SIZE 1024
-#define NUM_SEGMENTS 100
+void* thread_function(void* arg) {
+    struct HeapManager* heapManager = (struct HeapManager*)arg;
 
-typedef struct Segment {
-    int is_free;
-    int size;
-    void *address; // Adresa početka bloka
-} Segment;
-
-Segment segments[NUM_SEGMENTS];  // Niz segmenata
-
-int next_fit_index = 0;  // Indeks za 'Next fit' algoritam
-
-void initialize_heap_manager() {
-    for (int i = 0; i < NUM_SEGMENTS; ++i) {
-        segments[i].is_free = 1;  // Svi blokovi su na početku slobodni
-        segments[i].size = SEGMENT_SIZE;
-        segments[i].address = malloc(SEGMENT_SIZE);  // Alokacija memorije za svaki blok
-    }
-}
-
-void *allocate_memory(int size) {
-    int remaining_size = size;
-    void *allocated_block = NULL;
-
-    while (remaining_size > 0 && next_fit_index < NUM_SEGMENTS) {
-        if (segments[next_fit_index].is_free && segments[next_fit_index].size >= remaining_size) {
-            allocated_block = segments[next_fit_index].address;
-            segments[next_fit_index].is_free = 0;  // Oznaci blok kao zauzet
-
-            // Ako je blok veći od potrebne veličine, podeli ga na dva bloka
-            if (segments[next_fit_index].size > size) {
-                int remaining_segment_size = segments[next_fit_index].size - size;
-                segments[next_fit_index].size = size;
-
-                // Napravi novi slobodan blok od preostalog dela segmenta
-                segments[next_fit_index + 1].is_free = 1;
-                segments[next_fit_index + 1].size = remaining_segment_size;
-                segments[next_fit_index + 1].address = (char *)allocated_block + size;
-            }
-
-            next_fit_index++;
-
-            remaining_size = 0;  // Izađi iz petlje
+    for (int i = 0; i < 3; i++) {
+        int* value = (int*)allocate_memory(heapManager, sizeof(int));
+        if (value != NULL) {
+            *value = i;
+            printf("Thread %lu allocated value: %d\n", pthread_self(), *value);
         } else {
-            next_fit_index++;  // Pomeri se na sledeći blok
+            printf("Thread %lu failed to allocate memory\n", pthread_self());
         }
     }
 
-    return allocated_block;
-}
-
-void free_memory(void *address) {
-    for (int i = 0; i < NUM_SEGMENTS; ++i) {
-        if (segments[i].address == address) {
-            segments[i].is_free = 1;  // Oznaci blok kao slobodan
-
-            // Spajanje uzastopnih slobodnih segmenata
-            while (i < NUM_SEGMENTS - 1 && segments[i + 1].is_free) {
-                segments[i].size += segments[i + 1].size;
-                ++i;
-            }
-
-            break;
-        }
-    }
+    return NULL;
 }
 
 int main() {
-    initialize_heap_manager();
+    const int segmentsCount = 50;
+    const int segmentSize = sizeof(int);  // Adjust segment size for the desired type
+    struct HeapManager heapManager;
+    initialize_heap_manager(&heapManager, segmentsCount, segmentSize);
 
-    // Primer korišćenja
-    void *ptr1 = allocate_memory(200);  // Alokacija memorije od 200 bajtova
-    void *ptr2 = allocate_memory(400);
-    free_memory(ptr1);
+    // Testing Heap Manager in the main thread
+    for (int i = 0; i < 5; i++) {
+        int* intValue = (int*)allocate_memory(&heapManager, sizeof(int));
+        if (intValue != NULL) {
+            printf("Main thread allocated int value: %d\n", *intValue);
+        } else {
+            printf("Main thread failed to allocate memory\n");
+        }
+    }
+
+    for (int i = 0; i < 3; i++) {
+        int* value = (int*)allocate_memory(&heapManager, sizeof(int));
+        if (value != NULL) {
+            printf("Main thread allocated int value: %d\n", *value);
+
+            free_memory(&heapManager, value);
+            printf("Main thread deallocated int value: %d\n", *value);
+        } else {
+            printf("Main thread failed to allocate memory\n");
+        }
+    }
+
+    // Testing Heap Manager in additional threads
+    pthread_t threads[3];
+    for (int i = 0; i < 3; i++) {
+        pthread_create(&threads[i], NULL, thread_function, &heapManager);
+    }
+
+    for (int i = 0; i < 3; i++) {
+        pthread_join(threads[i], NULL);
+    }
+
+    // Displaying the number of allocations, deallocations, and fragmentation degree
+    printf("\nAllocations count: %d\n", get_allocations_count(&heapManager));
+    printf("Deallocations count: %d\n", get_deallocations_count(&heapManager));
+    printf("Fragmentation degree: %f\n", get_fragmentation_degree(&heapManager));
+
+    cleanup_heap_manager(&heapManager);
 
     return 0;
 }
