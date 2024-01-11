@@ -4,219 +4,171 @@
 #include <stdbool.h>  // Add this header for bool
 #include <winsock2.h>
 #include <unistd.h>  // Add this header for close
+#include "heap_manager.h"
 
 #define SERVER_PORT 4010
 #define BUFFER_SIZE 1024
 
 HANDLE semaphore1;
+CRITICAL_SECTION heapCriticalSection;
+CRITICAL_SECTION socketCriticalSection;
+int allocationCounter = 0;
+int deallocationCounter = 0;
 
 void* _alloc(int size) {
-	WaitForSingleObject(semaphore1, INFINITE);
-	void* ret = malloc(size);
-	ReleaseSemaphore(semaphore1, 1, NULL);
-	return ret;
+    WaitForSingleObject(semaphore1, INFINITE);
+
+    EnterCriticalSection(&heapCriticalSection);
+    void* ret = allocate_memory(size);
+    LeaveCriticalSection(&heapCriticalSection);
+
+    ReleaseSemaphore(semaphore1, 1, NULL);
+    return ret;
 }
 
 void _free(void* address) {
-	WaitForSingleObject(semaphore1, INFINITE);
-	free(address);
-	ReleaseSemaphore(semaphore1, 1, NULL);
+    WaitForSingleObject(semaphore1, INFINITE);
+
+    EnterCriticalSection(&heapCriticalSection);
+    free_memory(address);
+    LeaveCriticalSection(&heapCriticalSection);
+
+    ReleaseSemaphore(semaphore1, 1, NULL);
 }
 
+void printData() {
+    printf("Number of Allocations: %d\n", allocationCounter);
+    printf("Number of Deallocations: %d\n", deallocationCounter);
+    //printf("Fragmentation Degree: %f%%\n", fragmentation_degree());
+}
 
 int main() {
-    SOCKET listenSocket = INVALID_SOCKET;
+    WSADATA wsaData;
+    SOCKET serverSocket, clientSocket;
+    struct sockaddr_in serverAddress, clientAddress;
+    int clientAddressLength = sizeof(clientAddress);
+    int iResult;
+    char buffer[BUFFER_SIZE];
 
-	// Socket used for communication with client
-	SOCKET acceptedSocket;
-
-	// Variable used to store function return value
-	int iResult, iResultSend;
-
-	// Buffer used for storing incoming data
-	char dataBuffer[BUFFER_SIZE];
-
-	// WSADATA data structure that is to receive details of the Windows Sockets implementation
-	WSADATA wsaData;
-
-	// Initialize windows sockets library for this process
-	if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0)
-	{
-		printf("WSAStartup failed with error: %d\n", WSAGetLastError());
-		return 1;
-	}
-
-
-	semaphore1 = CreateSemaphore(NULL, 1, 1, NULL);
-    if (semaphore1 == NULL) {
-        printf("Failed to create semaphore: %d\n", GetLastError());
+    // Initialize Winsock
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        printf("WSAStartup failed with error: %d\n", WSAGetLastError());
         return 1;
     }
 
+    // Create a socket
+    serverSocket = socket(AF_INET, SOCK_STREAM, 0);
+    if (serverSocket == INVALID_SOCKET) {
+        printf("socket failed with error: %d\n", WSAGetLastError());
+        WSACleanup();
+        return 1;
+    }
 
-	// Initialize serverAddress structure used by bind
-    struct sockaddr_in serverAddress;
-	memset((char*)&serverAddress, 0, sizeof(serverAddress));
-	serverAddress.sin_family = AF_INET;				// IPv4 address family
-	serverAddress.sin_addr.s_addr = INADDR_ANY;		// Use all available addresses
-	serverAddress.sin_port = htons(SERVER_PORT);	// Use specific port
+    // Initialize server address structure
+    memset((char*)&serverAddress, 0, sizeof(serverAddress));
+    serverAddress.sin_family = AF_INET;
+    serverAddress.sin_addr.s_addr = INADDR_ANY;
+    serverAddress.sin_port = htons(SERVER_PORT);
 
+    // Bind the socket
+    iResult = bind(serverSocket, (struct sockaddr*)&serverAddress, sizeof(serverAddress));
+    if (iResult == SOCKET_ERROR) {
+        printf("bind failed with error: %d\n", WSAGetLastError());
+        closesocket(serverSocket);
+        WSACleanup();
+        return 1;
+    }
 
-	// Create a SOCKET for connecting to server
-	listenSocket = socket(AF_INET,      // IPv4 address family
-		SOCK_STREAM,  // Stream socket
-		IPPROTO_TCP); // TCP protocol
+    // Listen for incoming connections
+    iResult = listen(serverSocket, SOMAXCONN);
+    if (iResult == SOCKET_ERROR) {
+        printf("listen failed with error: %d\n", WSAGetLastError());
+        closesocket(serverSocket);
+        WSACleanup();
+        return 1;
+    }
 
-	// Check if socket is successfully created
-	if (listenSocket == INVALID_SOCKET)
-	{
-		printf("socket failed with error: %d\n", WSAGetLastError());
-		WSACleanup();
-		return 1;
-	}
+    printf("Server is waiting for connections...\n");
 
-	// Setup the TCP listening socket - bind port number and local address to socket
-	iResult = bind(listenSocket, (struct sockaddr*) &serverAddress, sizeof(serverAddress));
+    // Accept a client socket
+    clientSocket = accept(serverSocket, (struct sockaddr*)&clientAddress, &clientAddressLength);
+    if (clientSocket == INVALID_SOCKET) {
+        printf("accept failed with error: %d\n", WSAGetLastError());
+        closesocket(serverSocket);
+        WSACleanup();
+        return 1;
+    }
 
-	// Check if socket is successfully binded to address and port from sockaddr_in structure
-	if (iResult == SOCKET_ERROR)
-	{
-		printf("bind failed with error: %d\n", WSAGetLastError());
-		closesocket(listenSocket);
-		WSACleanup();
-		return 1;
-	}
+    printf("Client connected.\n");
 
-	//Postavljanje soketa u neblokirajuci rezim
-	unsigned long mode = 1; //non-blocking mode
-	iResult = ioctlsocket(listenSocket, FIONBIO, &mode);
-	if (iResult != NO_ERROR) {
-		printf("ioctlsocket failed with error: %d\n", iResult);
-	}
+    InitializeCriticalSection(&heapCriticalSection);
 
-	// Set listenSocket in listening mode
-	iResult = listen(listenSocket, SOMAXCONN);
-	if (iResult == SOCKET_ERROR)
-	{
-		printf("listen failed with error: %d\n", WSAGetLastError());
-		closesocket(listenSocket);
-		WSACleanup();
-		return 1;
-	}
+    // Main loop for handling client requests
+    do {
+        memset(buffer, 0, sizeof(buffer));
 
-	printf("Server socket is set to listening mode. Waiting for new connection requests.\n");
+        // Receive data from the client
+        iResult = recv(clientSocket, buffer, BUFFER_SIZE, 0);
+        if (iResult > 0) {
+            printf("Received data from client: %s\n", buffer);
 
-    fd_set readSet;
-    struct timeval timeout;
+            if (strcmp(buffer, "exit") == 0) {
+                printf("Client requested to exit. Closing the server.\n");
+                break;
+            }
+            if (strncmp(buffer, "allocate", 8) == 0) {
+                // Parse the size from the request
+                int size = atoi(buffer + 9);
 
+                EnterCriticalSection(&heapCriticalSection);
+                // Allocate memory
+                unsigned int ret = (unsigned int)_alloc(size);
+                allocationCounter++;
+                printData();
 
-	bool allocFlag;
-	do
-	{
-	    FD_ZERO(&readSet);
-        FD_SET(listenSocket, &readSet);
+                LeaveCriticalSection(&heapCriticalSection);
 
-        iResult = select(listenSocket + 1, &readSet, NULL, NULL, &timeout);
+                // Send the response back to the client
+                if (ret != 0) {
+                    itoa(ret, buffer, 10);
+                // Send the success response back to the client
+                    send(clientSocket, buffer, 28, 0);
+                } else {
+                    // Send the failure response back to the client
+                    send(clientSocket, "Memory allocation failed", 24, 0);
+                }
+            } else if (strncmp(buffer, "free", 4) == 0) {
+            // Parse the address from the request
+                void* address = (void*)atoi(buffer + 5);
 
-		if (iResult == -1)
-		{
-			fprintf(stderr, "select failed with error: %d\n", WSAGetLastError());
-			closesocket(listenSocket);
-			WSACleanup();
-			return 1;
-		}
-		else if (iResult > 0) {
-			acceptedSocket = accept(listenSocket, NULL, NULL);
+                EnterCriticalSection(&heapCriticalSection);
+                // Free memory
+                _free(address);
+                deallocationCounter++;
+                printData();
 
-			if (acceptedSocket == INVALID_SOCKET)
-			{
-				printf("accept failed with error: %d\n", WSAGetLastError());
-				closesocket(acceptedSocket);
-				WSACleanup();
-				return 1;
-			}
+                LeaveCriticalSection(&heapCriticalSection);
 
-			//non blocking
-			mode = 1;
-			iResult = ioctlsocket(acceptedSocket, FIONBIO, &mode);
-			if (iResult != NO_ERROR)
-				printf("ioctlsocket failed with error: %d\n", iResult);
+                // Send the response back to the client
+                send(clientSocket, "Memory freed successfully", 24, 0);
+            } else {
+                // Invalid request
+                send(clientSocket, "Invalid request", 15, 0);
+            }
+        } else if (iResult == 0) {
+            printf("Client disconnected.\n");
+        } else {
+            printf("recv failed with error: %d\n", WSAGetLastError());
+        }
+    } while (1);
 
-		}
-		else
-		{
-                /// ODAVDE NEGDE DOLE PUKNE, NA RECV VRV
-				iResult = recv(acceptedSocket, dataBuffer, BUFFER_SIZE, 0);
-				printf("RECV: %d", iResult);
-				if (iResult > 0)
-				{
-					int size = atoi(dataBuffer);
+    // Cleanup
+    closesocket(clientSocket);
+    closesocket(serverSocket);
+    WSACleanup();
 
-					if (size <= 2 && size > 0) {
-						if (size == 1) {
-							allocFlag = true;
-						}
-						else if (size == 2) {
-							allocFlag = false;
-						}
-
-						memset(dataBuffer, 0, BUFFER_SIZE);
-						strcpy_s(dataBuffer, sizeof(dataBuffer), "ACK");
-						iResultSend = send(acceptedSocket, dataBuffer, (int)strlen(dataBuffer), 0);
-
-					}
-					else if (size > 0) {
-						if (allocFlag) {
-							printf("Client is requesting %d bytes allocated.\n", size);
-							unsigned int ret = (unsigned int)_alloc(size);
-							itoa(ret, dataBuffer, 10);
-						}
-						else {
-							_free((void*)size);
-							printf("Client is freeing %d allocated address.\n", size);
-							itoa(size, dataBuffer, 10);
-						}
-						iResultSend = send(acceptedSocket, dataBuffer, (int)strlen(dataBuffer), 0);
-						//_print(masterHeapManager);
-					}
-				}
-				else if (iResult == 0)
-				{
-					printf("Connection with client closed.\n");
-					closesocket(acceptedSocket);
-				}
-				else if(iResult == -1)
-				{
-
-					printf("recv failed with error: %d\n", WSAGetLastError());
-					closesocket(acceptedSocket);
-				}
-				else {
-					continue;
-				}
-
-		}
-
-	} while (strcmp(dataBuffer, "poyy") != 0);
-
-		iResult = shutdown(acceptedSocket, SD_BOTH);
-
-		if (iResult == SOCKET_ERROR)
-		{
-			printf("shutdown failed with error: %d\n", WSAGetLastError());
-			closesocket(acceptedSocket);
-			WSACleanup();
-			return 1;
-		}
-		closesocket(acceptedSocket);
-
-
-	//Close listen and accepted sockets
-	closesocket(listenSocket);
-
-	printf("graceful shutdown!\n");
-	// Deinitialize WSA library
-	WSACleanup();
-
-	return 0;
+    DeleteCriticalSection(&heapCriticalSection);
+    return 0;
 }
+
+
