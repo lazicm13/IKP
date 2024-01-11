@@ -65,27 +65,27 @@ void* allocate_memory(int size) {
 // Function to free memory
 void free_memory(void* address) {
     if (address == NULL) {
-        // Ignore attempts to free NULL
         return;
     }
 
     // Move back to the block header
     struct Block* block = ((struct Block*)address) - 1;
 
-    // Clear the block content if needed
-    memset(block, 0, sizeof(struct Block)); // Uncomment if necessary
-
     // Lock the heap manager for exclusive access
     EnterCriticalSection(&heapCriticalSection);
 
-    // Link the block to the free list
-    if(block->status == ALLOCATED){
+    if (block->status == ALLOCATED) {
+        // Link the block to the free list
         block->next = head;
         block->status = FREE;
         head = block;
 
         // Increment the count of free segments
         freeSegments++;
+    } else {
+        printf("Error: Attempted to free an already free block.\n");
+        LeaveCriticalSection(&heapCriticalSection);
+        return;
     }
 
     // Unlock the heap manager
