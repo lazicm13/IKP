@@ -10,7 +10,6 @@ static int freeSegments = 0;
 static Block* lastAllocatedBlock = NULL;
 Block* allocatedBlocks = NULL;
 CRITICAL_SECTION heapCriticalSection;
-
 // Function to find a free block using next fit algorithm
 struct Block* find_free_block(int size) {
     struct Block* current_block = lastAllocatedBlock;
@@ -83,8 +82,8 @@ void free_memory(void* address) {
         // Increment the count of free segments
         freeSegments++;
     } else {
-        printf("Error: Attempted to free an already free block.\n");
         LeaveCriticalSection(&heapCriticalSection);
+        freeMemoryResult = 0;
         return;
     }
 
@@ -118,9 +117,11 @@ void free_memory(void* address) {
         // Unlock the heap manager
         LeaveCriticalSection(&heapCriticalSection);
     }
+    freeMemoryResult = 1;
 }
 
 // Function to calculate the fragmentation degree
+// Kao slobodni blokovi racunaju se samo blokovi koji su oslobodjeni tokom rada programa.
 double fragmentation_degree() {
     EnterCriticalSection(&heapCriticalSection);
 
@@ -130,14 +131,18 @@ double fragmentation_degree() {
     struct Block* currentBlock = head;
 
     // Iterate through the list and count the total number of segments and free segments
-    while (currentBlock != NULL) {
+    int i=0;
+    while (currentBlock != NULL && i<1000) {
         totalSegmentsCount++;
         if (currentBlock->status == FREE) {
             freeSegmentsCount++;
-            printf("Free segments counter: %d\n", freeSegmentsCount);
         }
         currentBlock = currentBlock->next;
+        i++;
     }
+
+    printf("\nTotal segments count %d", totalSegmentsCount);
+    printf("Free segments count %d\n", freeSegmentsCount);
 
     LeaveCriticalSection(&heapCriticalSection);
 
@@ -145,7 +150,6 @@ double fragmentation_degree() {
         // If we have no allocated memory, fragmentation is 0%
         return 0.0;
     }
-    printf("Total segments counter: %d\n", totalSegmentsCount);
     // Calculate the fragmentation degree as the ratio of free segments to total segments
     double fragmentationDegree = (double)freeSegmentsCount / totalSegmentsCount * 100.0;
 

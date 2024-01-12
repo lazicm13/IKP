@@ -13,6 +13,7 @@ typedef struct Block {
     struct Block* next;
 } Block;
 
+int freeMemoryResult;
 Block* find_free_block(int size);
 void* allocate_memory(int size);
 void free_memory(void* address);

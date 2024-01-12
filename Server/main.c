@@ -39,7 +39,7 @@ void _free(void* address) {
 void printData() {
     printf("Number of Allocations: %d\n", allocationCounter);
     printf("Number of Deallocations: %d\n", deallocationCounter);
-    //printf("Fragmentation Degree: %f%%\n", fragmentation_degree());
+    printf("Fragmentation Degree: %f%%\n", fragmentation_degree());
 }
 
 int main() {
@@ -143,14 +143,22 @@ int main() {
 
                 EnterCriticalSection(&heapCriticalSection);
                 // Free memory
+
                 _free(address);
-                deallocationCounter++;
-                printData();
+                if(freeMemoryResult != 0)
+                {
+                    deallocationCounter++;
+                    printData();
 
-                LeaveCriticalSection(&heapCriticalSection);
+                    LeaveCriticalSection(&heapCriticalSection);
 
-                // Send the response back to the client
-                send(clientSocket, "Memory freed successfully", 24, 0);
+                    // Send the response back to the client
+                    send(clientSocket, "Memory freed successfully", 24, 0);
+                }
+                else
+                {
+                    send(clientSocket, "Attempted to free already freed memory!", 38, 0);
+                }
             } else {
                 // Invalid request
                 send(clientSocket, "Invalid request", 15, 0);
