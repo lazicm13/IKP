@@ -9,37 +9,32 @@
 #define SERVER_PORT 4010
 #define BUFFER_SIZE 1024
 
-HANDLE semaphore1;
+HANDLE semaphore;
 CRITICAL_SECTION heapCriticalSection;
-CRITICAL_SECTION socketCriticalSection;
 int allocationCounter = 0;
 int deallocationCounter = 0;
 
 void* _alloc(int size) {
-    WaitForSingleObject(semaphore1, INFINITE);
+    WaitForSingleObject(semaphore, INFINITE);
 
-    EnterCriticalSection(&heapCriticalSection);
     void* ret = allocate_memory(size);
-    LeaveCriticalSection(&heapCriticalSection);
 
-    ReleaseSemaphore(semaphore1, 1, NULL);
+    ReleaseSemaphore(semaphore, 1, NULL);
     return ret;
 }
 
 void _free(void* address) {
-    WaitForSingleObject(semaphore1, INFINITE);
+    WaitForSingleObject(semaphore, INFINITE);
 
-    EnterCriticalSection(&heapCriticalSection);
     free_memory(address);
-    LeaveCriticalSection(&heapCriticalSection);
 
-    ReleaseSemaphore(semaphore1, 1, NULL);
+    ReleaseSemaphore(semaphore, 1, NULL);
 }
 
 void printData() {
     printf("Number of Allocations: %d\n", allocationCounter);
     printf("Number of Deallocations: %d\n", deallocationCounter);
-    printf("Fragmentation Degree: %f%%\n", fragmentation_degree());
+    printf("Fragmentation Degree: %.2f%%\n", fragmentation_degree());
 }
 
 int main() {

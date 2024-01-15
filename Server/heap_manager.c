@@ -9,10 +9,13 @@ static Block* head = NULL;
 static int freeSegments = 0;
 static Block* lastAllocatedBlock = NULL;
 Block* allocatedBlocks = NULL;
+Block* heap_start = NULL;
 CRITICAL_SECTION heapCriticalSection;
+static int allocated_blocks = 0;
+
 // Function to find a free block using next fit algorithm
 struct Block* find_free_block(int size) {
-    struct Block* current_block = lastAllocatedBlock;
+    struct Block* current_block = (lastAllocatedBlock != NULL) ? lastAllocatedBlock->next : heap_start;
 
     // Iterate through the free blocks starting from the last allocated block
     do {
@@ -50,7 +53,7 @@ void* allocate_memory(int size) {
         new_block->next = head;
         new_block->status = ALLOCATED;
         head = new_block;
-
+        allocated_blocks++;
         lastAllocatedBlock = new_block; // Update the last allocated block
         return (void*)(new_block + 1); // Return the address right after the block header
     } else {
@@ -120,38 +123,37 @@ void free_memory(void* address) {
     freeMemoryResult = 1;
 }
 
-// Function to calculate the fragmentation degree
 // Kao slobodni blokovi racunaju se samo blokovi koji su oslobodjeni tokom rada programa.
 double fragmentation_degree() {
-    EnterCriticalSection(&heapCriticalSection);
+    // Initialize variables
+    int total_free_memory = 0;
+    int largest_free_block = 0;
 
-    int freeSegmentsCount = 0;
-    int totalSegmentsCount = 0;
+    // Choose the starting point based on available information
+    Block* current_block = head; // Start from the beginning of the free list
 
-    struct Block* currentBlock = head;
-
-    // Iterate through the list and count the total number of segments and free segments
-    int i=0;
-    while (currentBlock != NULL && i<1000) {
-        totalSegmentsCount++;
-        if (currentBlock->status == FREE) {
-            freeSegmentsCount++;
+    // Traverse the list of freed blocks
+    for (int i=0;i<allocated_blocks; i++) {
+        if (current_block->status == FREE) {  // If the block is FREE
+            printf("\n\tCurrent block size: %d\n", (int*)current_block->size);
+            total_free_memory += current_block->size;
+            if (current_block->size > largest_free_block) {
+                largest_free_block = current_block->size;
+            }
         }
-        currentBlock = currentBlock->next;
-        i++;
+        current_block = current_block->next;
+    printf("\n\tTotal free memory: %d\n\tLargest free memory: %d", total_free_memory, largest_free_block);
     }
 
-    printf("\nTotal segments count %d", totalSegmentsCount);
-    printf("Free segments count %d\n", freeSegmentsCount);
 
-    LeaveCriticalSection(&heapCriticalSection);
 
-    if (totalSegmentsCount == 0) {
-        // If we have no allocated memory, fragmentation is 0%
-        return 0.0;
+    // Calculate fragmentation degree
+    double degree = 0.0;
+    if (largest_free_block > 0) {
+        degree = (double)total_free_memory / (double)largest_free_block;
     }
-    // Calculate the fragmentation degree as the ratio of free segments to total segments
-    double fragmentationDegree = (double)freeSegmentsCount / totalSegmentsCount * 100.0;
 
-    return fragmentationDegree;
+    return degree;
 }
+
+

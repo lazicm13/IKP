@@ -18,6 +18,5 @@ Block* find_free_block(int size);
 void* allocate_memory(int size);
 void free_memory(void* address);
 double fragmentation_degree();
-int isValidAddress(void* address);
 
 #endif // HEAP_MANAGER_H_INCLUDED
