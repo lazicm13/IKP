@@ -142,7 +142,7 @@ double fragmentation_degree() {
             }
         }
         current_block = current_block->next;
-    printf("\n\tTotal free memory: %d\n\tLargest free memory: %d", total_free_memory, largest_free_block);
+    printf("\tTotal free memory: %d\n\tLargest free memory: %d\n", total_free_memory, largest_free_block);
     }
 
 
@@ -155,5 +155,3 @@ double fragmentation_degree() {
 
     return degree;
 }
-
-
