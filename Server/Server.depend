@@ -1,17 +1,17 @@
 # depslib dependency file v1.0
-1705325181 source:c:\users\filip\documents\github\ikp_projekat\server\main.c
+1705421758 source:c:\users\filip\documents\github\ikp_projekat\server\main.c
 	<stdio.h>
 	<stdlib.h>
 	<string.h>
 	<stdbool.h>
 	<winsock2.h>
-	<unistd.h>
+	<windows.h>
 	"heap_manager.h"
 
-1705321882 c:\users\filip\documents\github\ikp_projekat\server\heap_manager.h
+1705419956 c:\users\filip\documents\github\ikp_projekat\server\heap_manager.h
 	<stdbool.h>
 
-1705326248 source:c:\users\filip\documents\github\ikp_projekat\server\heap_manager.c
+1705421635 source:c:\users\filip\documents\github\ikp_projekat\server\heap_manager.c
 	"heap_manager.h"
 	<stddef.h>
 	<windows.h>
